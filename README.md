@@ -28,9 +28,6 @@ Backend: FastAPI
 Frontend: HTML + Tailwind CSS + JavaScript
 Memory: LangGraph MemorySaver (Checkpointer)
 
----
 
-
-```bash
 git clone https://github.com/YOUR-USERNAME/ikms-conversational-rag.git
 cd ikms-conversational-rag
