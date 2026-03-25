@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>IKMS Conversational RAG - Feature 5</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; }
+    .chat-container { max-width: 900px; margin: 0 auto; }
+    .message { 
+      max-width: 75%; 
+      padding: 14px 18px; 
+      border-radius: 20px; 
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
+    .user { 
+      background-color: #2563eb; 
+      color: white; 
+      align-self: flex-end; 
+      border-bottom-right-radius: 4px;
+    }
+    .assistant { 
+      background-color: #f1f5f9; 
+      color: #1e2937; 
+      align-self: flex-start; 
+      border-bottom-left-radius: 4px;
+    }
+    .loading {
+      animation: pulse 1.5s infinite;
+    }
+  </style>
+</head>
+<body class="bg-gray-950 text-white min-h-screen py-8">
+  <div class="chat-container mx-auto bg-gray-900 rounded-3xl shadow-2xl overflow-hidden border border-gray-800">
+    
+    <!-- Header -->
+    <div class="bg-gradient-to-r from-blue-600 to-indigo-600 p-5 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <i class="fas fa-brain text-3xl"></i>
+        <div>
+          <h1 class="text-2xl font-bold">IKMS Conversational RAG</h1>
+          <p class="text-sm text-blue-200">Feature 5 • Multi-turn Memory + Multi-Agent</p>
+        </div>
+      </div>
+      <div class="flex gap-3">
+        <button onclick="newConversation()" 
+                class="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 px-5 py-2 rounded-xl text-sm font-medium transition">
+          <i class="fas fa-plus"></i> New Chat
+        </button>
+        <button onclick="indexPdf()" 
+                class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 px-5 py-2 rounded-xl text-sm font-medium transition">
+          <i class="fas fa-file-pdf"></i> Index PDF
+        </button>
+      </div>
+    </div>
+
+    <!-- Chat Area -->
+    <div id="chat" class="h-[520px] overflow-y-auto p-6 flex flex-col space-y-4 bg-gray-950"></div>
+
+    <!-- Input Area -->
+    <div class="p-5 border-t border-gray-800 bg-gray-900">
+      <div class="flex gap-3">
+        <input 
+          id="userInput" 
+          type="text" 
+          placeholder="Ask anything about the documents... (I remember our conversation)" 
+          class="flex-1 bg-gray-800 text-white border border-gray-700 focus:border-blue-500 rounded-2xl px-6 py-4 focus:outline-none text-base"
+          onkeypress="if(event.key === 'Enter') sendMessage()">
+        <button 
+          onclick="sendMessage()"
+          id="sendBtn"
+          class="bg-blue-600 hover:bg-blue-700 w-14 h-14 rounded-2xl flex items-center justify-center transition">
+          <i class="fas fa-paper-plane text-xl"></i>
+        </button>
+      </div>
+      <p class="text-center text-xs text-gray-500 mt-3">Session ID: <span id="sessionDisplay" class="font-mono"></span></p>
+    </div>
+  </div>
+
+  <script>
+    let sessionId = "session_" + Date.now();
+    let isLoading = false;
+
+    function updateSessionDisplay() {
+      document.getElementById("sessionDisplay").textContent = sessionId;
+    }
+
+    function addMessage(text, isUser) {
+      const chat = document.getElementById("chat");
+      const div = document.createElement("div");
+      div.className = `message ${isUser ? 'user' : 'assistant'}`;
+      div.innerHTML = text.replace(/\n/g, '<br>');
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function showLoading() {
+      isLoading = true;
+      const chat = document.getElementById("chat");
+      const loadingDiv = document.createElement("div");
+      loadingDiv.id = "loading";
+      loadingDiv.className = "message assistant loading";
+      loadingDiv.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Thinking...`;
+      chat.appendChild(loadingDiv);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function removeLoading() {
+      isLoading = false;
+      const loading = document.getElementById("loading");
+      if (loading) loading.remove();
+    }
+
+    async function sendMessage() {
+      const input = document.getElementById("userInput");
+      const question = input.value.trim();
+      if (!question || isLoading) return;
+
+      addMessage(question, true);
+      input.value = "";
+      showLoading();
+
+      try {
+        const res = await fetch("http://127.0.0.1:8000/qa/conversation", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            question: question, 
+            session_id: sessionId 
+          })
+        });
+
+        if (!res.ok) throw new Error("Server error");
+
+        const data = await res.json();
+        removeLoading();
+        addMessage(data.answer || "Sorry, I couldn't generate an answer.", false);
+      } catch (err) {
+        removeLoading();
+        addMessage("❌ Error: Cannot connect to backend.<br>Make sure python main.py is still running.", false);
+      }
+    }
+
+    function newConversation() {
+      if (confirm("Start a new conversation?")) {
+        sessionId = "session_" + Date.now();
+        document.getElementById("chat").innerHTML = "";
+        updateSessionDisplay();
+        addMessage("🆕 New conversation started.<br>I will remember everything we discuss from now on.", false);
+      }
+    }
+
+    function indexPdf() {
+      const filePath = prompt("Enter the full path to your PDF file:\n(e.g. C:\\Users\\ishar\\Desktop\\sample.pdf)");
+      if (!filePath) return;
+
+      fetch(`http://127.0.0.1:8000/index-pdf?file_path=${encodeURIComponent(filePath)}`, { 
+        method: "POST" 
+      })
+      .then(res => res.json())
+      .then(data => alert(data.message || "✅ PDF indexed successfully!"))
+      .catch(() => alert("❌ Failed to index PDF. Make sure backend is running."));
+    }
+
+    // Initialize
+    window.onload = () => {
+      updateSessionDisplay();
+      addMessage("👋 Hello! I'm your conversational RAG assistant.<br>First, click 'Index PDF' to upload a document, then start asking questions.<br>I can remember our entire conversation!", false);
+    };
+  </script>
+</body>
+</html>
